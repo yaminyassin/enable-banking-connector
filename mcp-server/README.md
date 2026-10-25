@@ -9,7 +9,7 @@ Consent (once, on the box):
   # open URL, approve, copy the https://localhost:8443/callback?...code=... URL
   .venv/bin/python -m ebmcp.consent finish --code '<callback URL or code>'
 
-Run: MCP_AUTH_TOKEN=... .venv/bin/python -m ebmcp.server   -> http://host:8000/mcp (streamable HTTP), /healthz unauthenticated.
+Run: MCP_AUTH_TOKEN=... .venv/bin/python -m ebmcp.server   -> http://host:8000/mcp (streamable HTTP), /healthz and /health unauthenticated (on Cloud Run use /health; Google reserves /healthz).
 Offline check: .venv/bin/python verify.py
 
 Azure Container Apps: build the Dockerfile, mount private.pem as a secret volume at /secrets/private.pem,

@@ -1,5 +1,5 @@
-"""Streamable-HTTP MCP server, read-only. Endpoint: POST/GET /mcp. Health: GET /healthz.
-Every request except /healthz needs `Authorization: Bearer $MCP_AUTH_TOKEN`."""
+"""Streamable-HTTP MCP server, read-only. Endpoint: POST/GET /mcp. Health: GET /healthz or /health (Cloud Run reserves /healthz).
+Every request except the health paths needs `Authorization: Bearer $MCP_AUTH_TOKEN`."""
 import hmac
 import os
 
@@ -58,11 +58,11 @@ class BearerAuth:
         self.app, self.token = app, token.encode()
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and scope["path"] != "/healthz":
+        if scope["type"] == "http" and scope["path"] not in ("/healthz", "/health"):
             auth = dict(scope["headers"]).get(b"authorization", b"")
             if not (auth.startswith(b"Bearer ") and hmac.compare_digest(auth[7:], self.token)):
                 return await JSONResponse({"error": "unauthorized"}, 401)(scope, receive, send)
-        if scope["type"] == "http" and scope["path"] == "/healthz":
+        if scope["type"] == "http" and scope["path"] in ("/healthz", "/health"):
             return await PlainTextResponse("ok")(scope, receive, send)
         await self.app(scope, receive, send)
 

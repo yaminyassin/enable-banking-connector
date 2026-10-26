@@ -22,14 +22,16 @@ mcp = FastMCP(
 
 @mcp.tool()
 def list_accounts() -> list[dict]:
-    """List accounts in the authorized session (uid, IBAN/identifier, name, currency, type)."""
-    s = client.get(f"/sessions/{client.session_id()}")
+    """List accounts across all authorized bank sessions (uid, bank, IBAN/identifier, name, currency, type)."""
     out = []
-    for uid in s.get("accounts", []):
-        d = client.get(f"/accounts/{uid}/details")
-        out.append({"account_id": uid, "identifier": d.get("account_id"), "name": d.get("name"),
-                    "details": d.get("details"), "product": d.get("product"),
-                    "currency": d.get("currency"), "cash_account_type": d.get("cash_account_type")})
+    for sid in client.session_ids():
+        s = client.get(f"/sessions/{sid}")
+        bank = (s.get("aspsp") or {}).get("name")
+        for uid in s.get("accounts", []):
+            d = client.get(f"/accounts/{uid}/details")
+            out.append({"account_id": uid, "bank": bank, "identifier": d.get("account_id"), "name": d.get("name"),
+                        "details": d.get("details"), "product": d.get("product"),
+                        "currency": d.get("currency"), "cash_account_type": d.get("cash_account_type")})
     return out
 
 

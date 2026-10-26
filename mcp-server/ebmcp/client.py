@@ -5,6 +5,7 @@ Deliberately has NO payment (PIS) endpoints. Only these calls exist:
   GET /sessions/{id}, GET /accounts/{id}/details|balances|transactions
 Never log the JWT, the key, or the session id.
 """
+import logging
 import os
 import stat
 import time
@@ -13,6 +14,7 @@ from pathlib import Path
 import httpx
 import jwt
 
+logging.getLogger("httpx").setLevel(logging.WARNING)  # URLs carry session ids
 API = os.environ.get("ENABLEBANKING_API", "https://api.enablebanking.com")
 KEY_PATH = os.environ.get("ENABLEBANKING_KEY_PATH", "/workspace/enablebanking/private.pem")
 SESSION_FILE = os.environ.get("ENABLEBANKING_SESSION_FILE", str(Path.home() / ".enablebanking_session"))
@@ -29,13 +31,14 @@ def make_jwt(app_id: str | None = None, key_path: str | None = None) -> str:
     return jwt.encode(claims, key, algorithm="RS256", headers={"kid": app_id, "typ": "JWT"})
 
 
-def session_id() -> str:
-    sid = os.environ.get("ENABLEBANKING_SESSION_ID")
-    if sid:
-        return sid.strip()
-    p = Path(SESSION_FILE)
-    if p.exists():
-        return p.read_text().strip()
+def session_ids() -> list[str]:
+    """ENABLEBANKING_SESSION_ID (comma-separated) or the session file (comma/newline-separated)."""
+    raw = os.environ.get("ENABLEBANKING_SESSION_ID")
+    if not raw and Path(SESSION_FILE).exists():
+        raw = Path(SESSION_FILE).read_text()
+    ids = [x.strip() for x in (raw or "").replace("\n", ",").split(",") if x.strip()]
+    if ids:
+        return ids
     raise RuntimeError("No session: set ENABLEBANKING_SESSION_ID or run `python -m ebmcp.consent`")
 
 

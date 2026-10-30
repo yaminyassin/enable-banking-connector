@@ -42,12 +42,17 @@ def session_ids() -> list[str]:
     raise RuntimeError("No session: set ENABLEBANKING_SESSION_ID or run `python -m ebmcp.consent`")
 
 
-def save_session(sid: str) -> None:
-    p = Path(SESSION_FILE)
+def bank_slug(name: str) -> str:
+    return "".join(c for c in name.lower() if c.isalnum())
+
+
+def save_session(sid: str, path: str | None = None) -> Path:
+    p = Path(path) if path else Path(SESSION_FILE)
     fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write(sid)
     os.chmod(p, stat.S_IRUSR | stat.S_IWUSR)
+    return p
 
 
 def _req(method: str, path: str, **kw) -> dict:

@@ -43,8 +43,9 @@ def main():
                 sys.exit(f"Bank returned error: {q.get('error')} {q.get('error_description')}")
             code = q["code"][0]
         r = client.create_session(code)
-        bank = (r.get("aspsp") or {}).get("name") or "unknown"
-        saved = client.save_session(r["session_id"], bank)
+        aspsp = r.get("aspsp") or {}
+        bank = aspsp.get("name") or "unknown"
+        saved = client.save_session(r["session_id"], bank, aspsp.get("country") or "")
         print(f"Session saved to {saved} (mode 600). Bank={bank}. Valid until {r['access'].get('valid_until')}.")
         for acc in r.get("accounts", []) + r.get("accounts_data", []):
             if isinstance(acc, dict):

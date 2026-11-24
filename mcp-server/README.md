@@ -7,7 +7,7 @@ MCP_AUTH_TOKEN (>=32 chars), PORT (8000).
 Sessions, first source that yields ids wins:
 1. ENABLEBANKING_SESSION_ID (comma-separated). Use this in containers.
 2. Else ENABLEBANKING_SESSION_FILE (default ~/.enablebanking_session) plus sibling
-   files ENABLEBANKING_SESSION_FILE.<bank-slug> written by `consent finish` (mode 600).
+   files ENABLEBANKING_SESSION_FILE.<name+country slug> written by `consent finish` (mode 600).
    Re-consenting a bank overwrites that bank's file only.
 
 Consent (once, on the box):

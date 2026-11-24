@@ -75,6 +75,20 @@ def test_empty_env_falls_through_to_files(monkeypatch):
     assert client.session_ids() == [REVOLUT]
 
 
+def test_whitespace_env_falls_through_to_files(monkeypatch):
+    client.save_session(REVOLUT, "Revolut")
+    monkeypatch.setenv("ENABLEBANKING_SESSION_ID", "  ,  ")
+    assert client.session_ids() == [REVOLUT]
+
+
+def test_same_name_different_country_does_not_clobber():
+    fi = client.save_session("sid-fi", "Nordea", "FI")
+    se = client.save_session("sid-se", "Nordea", "SE")
+    assert fi.name.endswith(".nordeafi")
+    assert se.name.endswith(".nordease")
+    assert client.session_ids() == ["sid-fi", "sid-se"]
+
+
 def test_directory_with_session_prefix_is_ignored(tmp_path):
     (tmp_path / ".enablebanking_session.revolut").mkdir()
     client.save_session(SEB, "SEB")

@@ -72,13 +72,13 @@ def _parse_ids(raw: str) -> list[str]:
     return [x.strip() for x in raw.replace("\n", ",").split(",") if x.strip()]
 
 
-def _bank_slug(name: str) -> str:
-    return "".join(c for c in name.lower() if c.isalnum()) or "unknown"
+def _bank_slug(name: str, country: str = "") -> str:
+    return "".join(c for c in f"{name}{country}".lower() if c.isalnum()) or "unknown"
 
 
-def _session_path(bank: str) -> Path:
+def _session_path(bank: str, country: str = "") -> Path:
     base = Path(SESSION_FILE)
-    return base.with_name(f"{base.name}.{_bank_slug(bank)}")
+    return base.with_name(f"{base.name}.{_bank_slug(bank, country)}")
 
 
 def _session_files() -> list[Path]:
@@ -94,11 +94,8 @@ def _session_files() -> list[Path]:
 
 
 def session_ids() -> list[str]:
-    raw = os.environ.get("ENABLEBANKING_SESSION_ID")
-    if raw:
-        ids = _parse_ids(raw)
-    else:
-        ids = []
+    ids = _parse_ids(os.environ.get("ENABLEBANKING_SESSION_ID") or "")
+    if not ids:
         seen: set[str] = set()
         for path in _session_files():
             for sid in _parse_ids(path.read_text()):
@@ -110,8 +107,8 @@ def session_ids() -> list[str]:
     raise RuntimeError("No session: set ENABLEBANKING_SESSION_ID or run `python -m ebmcp.consent`")
 
 
-def save_session(sid: str, bank: str) -> Path:
-    p = _session_path(bank)
+def save_session(sid: str, bank: str, country: str = "") -> Path:
+    p = _session_path(bank, country)
     fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write(sid)

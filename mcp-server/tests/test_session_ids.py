@@ -89,6 +89,15 @@ def test_same_name_different_country_does_not_clobber():
     assert client.session_ids() == ["sid-fi", "sid-se"]
 
 
+def test_save_with_country_replaces_name_only_file():
+    old = client.save_session(REVOLUT, "Revolut")
+    new = client.save_session("sid-revolut-lt", "Revolut", "LT")
+    assert old.name.endswith(".revolut")
+    assert new.name.endswith(".revolutlt")
+    assert not old.exists()
+    assert client.session_ids() == ["sid-revolut-lt"]
+
+
 def test_directory_with_session_prefix_is_ignored(tmp_path):
     (tmp_path / ".enablebanking_session.revolut").mkdir()
     client.save_session(SEB, "SEB")

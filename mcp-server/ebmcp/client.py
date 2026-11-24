@@ -113,6 +113,9 @@ def save_session(sid: str, bank: str, country: str = "") -> Path:
     with os.fdopen(fd, "w") as f:
         f.write(sid)
     os.chmod(p, stat.S_IRUSR | stat.S_IWUSR)
+    legacy = _session_path(bank)
+    if country and legacy != p and legacy.is_file():
+        legacy.unlink()
     return p
 
 

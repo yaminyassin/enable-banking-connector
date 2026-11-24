@@ -66,27 +66,54 @@ def make_jwt(app_id: str | None = None, key_path: str | None = None) -> str:
     return jwt.encode(claims, key, algorithm="RS256", headers={"kid": app_id, "typ": "JWT"})
 
 
+def _parse_ids(raw: str) -> list[str]:
+    return [x.strip() for x in raw.replace("\n", ",").split(",") if x.strip()]
+
+
+def _bank_slug(name: str, country: str = "") -> str:
+    return "".join(c for c in f"{name}{country}".lower() if c.isalnum()) or "unknown"
+
+
+def _session_path(bank: str, country: str = "") -> Path:
+    base = Path(SESSION_FILE)
+    return base.with_name(f"{base.name}.{_bank_slug(bank, country)}")
+
+
+def _session_files() -> list[Path]:
+    base = Path(SESSION_FILE)
+    files = []
+    if base.is_file():
+        files.append(base)
+    parent = base.parent
+    prefix = base.name + "."
+    if parent.is_dir():
+        files.extend(sorted(p for p in parent.iterdir() if p.name.startswith(prefix) and p.is_file()))
+    return files
+
+
 def session_ids() -> list[str]:
-    """ENABLEBANKING_SESSION_ID (comma-separated) or the session file (comma/newline-separated)."""
-    raw = os.environ.get("ENABLEBANKING_SESSION_ID")
-    if not raw and Path(SESSION_FILE).exists():
-        raw = Path(SESSION_FILE).read_text()
-    ids = [x.strip() for x in (raw or "").replace("\n", ",").split(",") if x.strip()]
+    ids = _parse_ids(os.environ.get("ENABLEBANKING_SESSION_ID") or "")
+    if not ids:
+        seen: set[str] = set()
+        for path in _session_files():
+            for sid in _parse_ids(path.read_text()):
+                if sid not in seen:
+                    seen.add(sid)
+                    ids.append(sid)
     if ids:
         return ids
     raise RuntimeError("No session: set ENABLEBANKING_SESSION_ID or run `python -m ebmcp.consent`")
 
 
-def bank_slug(name: str) -> str:
-    return "".join(c for c in name.lower() if c.isalnum())
-
-
-def save_session(sid: str, path: str | None = None) -> Path:
-    p = Path(path) if path else Path(SESSION_FILE)
+def save_session(sid: str, bank: str, country: str = "") -> Path:
+    p = _session_path(bank, country)
     fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write(sid)
     os.chmod(p, stat.S_IRUSR | stat.S_IWUSR)
+    legacy = _session_path(bank)
+    if country and legacy != p and legacy.is_file():
+        legacy.unlink()
     return p
 
 

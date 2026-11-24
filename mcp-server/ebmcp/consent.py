@@ -4,8 +4,8 @@
       -> prints the bank URL. Open it, approve, then copy the `code` from the
          https://localhost:8443/callback?...&code=... address bar (page will not load; that's fine).
   python -m ebmcp.consent finish --code <code>   (or paste the whole callback URL)
-      -> exchanges code for a session, saves session_id to ~/.enablebanking_session.<bank-slug>
-         (mode 600; does not overwrite other banks), prints account names only (never the session id).
+      -> exchanges code for a session, saves it to ~/.enablebanking_session.<bank-slug>
+         (mode 600; does not overwrite other banks). Prints account names only (never the session id).
 """
 import argparse
 import secrets
@@ -43,9 +43,9 @@ def main():
                 sys.exit(f"Bank returned error: {q.get('error')} {q.get('error_description')}")
             code = q["code"][0]
         r = client.create_session(code)
-        bank = (r.get("aspsp") or {}).get("name") or "unknown"
-        path = f"{client.SESSION_FILE}.{client.bank_slug(bank)}"
-        saved = client.save_session(r["session_id"], path)
+        aspsp = r.get("aspsp") or {}
+        bank = aspsp.get("name") or "unknown"
+        saved = client.save_session(r["session_id"], bank, aspsp.get("country") or "")
         print(f"Session saved to {saved} (mode 600). Bank={bank}. Valid until {r['access'].get('valid_until')}.")
         for acc in r.get("accounts", []) + r.get("accounts_data", []):
             if isinstance(acc, dict):

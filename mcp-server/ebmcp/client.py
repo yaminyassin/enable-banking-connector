@@ -51,8 +51,6 @@ _MESSAGES = {
 
 
 class EnableBankingError(RuntimeError):
-    """Classified Enable Banking failure. str(error) is safe to show callers."""
-
     def __init__(self, kind: str, message: str):
         super().__init__(message)
         self.kind = kind

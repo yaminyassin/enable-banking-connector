@@ -88,30 +88,52 @@ def test_missing_session_is_consent_not_generic_client_error(monkeypatch, sleeps
     assert sleeps == []
 
 
-def test_unauthorized_status_is_consent_without_retry(monkeypatch, sleeps):
+def test_access_denied_is_client_not_consent(monkeypatch, sleeps):
     script = Script(_json(403, "ACCESS_DENIED"), _json(403, "ACCESS_DENIED"))
     _install(monkeypatch, script)
     with pytest.raises(client.EnableBankingError) as ei:
         client.get(f"/accounts/{CALLER_ACCOUNT_ID}/balances")
-    assert ei.value.kind == "consent"
+    assert ei.value.kind == "client"
+    assert "re-run consent" not in str(ei.value).lower()
     assert script.calls == 1
     assert sleeps == []
 
 
-def test_rate_limit_retries_then_rate_limited(monkeypatch, sleeps):
+def test_wrong_credentials_is_client_not_consent(monkeypatch, sleeps):
+    script = Script(_json(401, "WRONG_CREDENTIALS_PROVIDED"))
+    _install(monkeypatch, script)
+    with pytest.raises(client.EnableBankingError) as ei:
+        client.get(f"/sessions/{SESSION_ID}")
+    assert ei.value.kind == "client"
+    assert "re-run consent" not in str(ei.value).lower()
+    assert script.calls == 1
+    assert sleeps == []
+
+
+def test_401_without_error_code_is_client(monkeypatch, sleeps):
+    script = Script(_json(401))
+    _install(monkeypatch, script)
+    with pytest.raises(client.EnableBankingError) as ei:
+        client.get(f"/sessions/{SESSION_ID}")
+    assert ei.value.kind == "client"
+    assert script.calls == 1
+    assert sleeps == []
+
+
+def test_aspsp_rate_limit_is_not_retried(monkeypatch, sleeps):
     script = Script(_json(429, "ASPSP_RATE_LIMIT_EXCEEDED"))
     _install(monkeypatch, script)
     with pytest.raises(client.EnableBankingError) as ei:
         client.get(f"/accounts/{CALLER_ACCOUNT_ID}/transactions")
     assert ei.value.kind == "rate_limited"
     assert "rate limited" in str(ei.value).lower()
-    assert script.calls == client.MAX_ATTEMPTS
-    assert sleeps == [0.5, 1.0]
+    assert script.calls == 1
+    assert sleeps == []
 
 
-def test_rate_limit_respects_retry_after_and_succeeds(monkeypatch, sleeps):
+def test_platform_429_respects_retry_after_and_succeeds(monkeypatch, sleeps):
     script = Script(
-        _json(429, "ASPSP_RATE_LIMIT_EXCEEDED", headers={"Retry-After": "7"}),
+        _json(429, headers={"Retry-After": "7"}),
         httpx.Response(200, json={"balances": []}),
     )
     _install(monkeypatch, script)
@@ -129,7 +151,7 @@ def test_retry_after_is_capped(monkeypatch, sleeps):
     assert sleeps == [client.MAX_RETRY_WAIT, client.MAX_RETRY_WAIT]
 
 
-def test_5xx_retries_then_unavailable(monkeypatch, sleeps):
+def test_aspsp_error_on_5xx_is_unavailable_without_retry(monkeypatch, sleeps):
     iban = "FI2112345600000785"
     script = Script(_json(502, "ASPSP_ERROR", extra={"detail": {"iban": iban}}))
     _install(monkeypatch, script)
@@ -138,8 +160,8 @@ def test_5xx_retries_then_unavailable(monkeypatch, sleeps):
     assert ei.value.kind == "unavailable"
     assert "unavailable" in str(ei.value).lower()
     assert iban not in str(ei.value)
-    assert script.calls == client.MAX_ATTEMPTS
-    assert sleeps == [0.5, 1.0]
+    assert script.calls == 1
+    assert sleeps == []
 
 
 def test_aspsp_error_on_4xx_is_unavailable_without_retry(monkeypatch, sleeps):
@@ -210,7 +232,7 @@ def test_retry_after_http_date(monkeypatch, sleeps):
     monkeypatch.setattr(time, "time", lambda: 1_700_000_000.0)
     later = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime(1_700_000_004.0))
     script = Script(
-        _json(429, "ASPSP_RATE_LIMIT_EXCEEDED", headers={"Retry-After": later}),
+        _json(429, headers={"Retry-After": later}),
         httpx.Response(200, json={"ok": True}),
     )
     _install(monkeypatch, script)
@@ -219,9 +241,19 @@ def test_retry_after_http_date(monkeypatch, sleeps):
     assert sleeps == [4.0]
 
 
+def test_aspsp_timeout_is_not_retried(monkeypatch, sleeps):
+    script = Script(_json(500, "ASPSP_TIMEOUT"))
+    _install(monkeypatch, script)
+    with pytest.raises(client.EnableBankingError) as ei:
+        client.get(f"/sessions/{SESSION_ID}")
+    assert ei.value.kind == "unavailable"
+    assert script.calls == 1
+    assert sleeps == []
+
+
 def test_5xx_then_success_returns_body(monkeypatch, sleeps):
     script = Script(
-        _json(500, "ASPSP_TIMEOUT"),
+        _json(500),
         httpx.Response(200, json={"accounts": ["ok"]}),
     )
     _install(monkeypatch, script)

@@ -9,6 +9,7 @@ import logging
 import os
 import stat
 import time
+from datetime import timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
@@ -24,19 +25,13 @@ TIMEOUT = 60
 MAX_ATTEMPTS = 3
 MAX_RETRY_WAIT = 30.0
 
-# Enable Banking `error` enum values we use for classification only (never echoed).
 _CONSENT_CODES = frozenset({
-    "ACCESS_DENIED",
-    "AUTHORIZATION_NOT_PROVIDED",
     "CLOSED_SESSION",
     "EXPIRED_AUTHORIZATION_CODE",
     "EXPIRED_SESSION",
     "REVOKED_SESSION",
     "SESSION_DOES_NOT_EXIST",
-    "UNAUTHORIZED_ACCESS",
-    "UNAUTHORIZED_IP",
     "WRONG_AUTHORIZATION_CODE",
-    "WRONG_CREDENTIALS_PROVIDED",
     "WRONG_SESSION_STATUS",
 })
 _RATE_CODES = frozenset({"ASPSP_RATE_LIMIT_EXCEEDED"})
@@ -144,14 +139,16 @@ def _eb_error_code(response: httpx.Response) -> str | None:
 def _classify(status: int, eb_code: str | None) -> str:
     if eb_code in _RATE_CODES or status == 429:
         return _KIND_RATE
-    if eb_code in _CONSENT_CODES or status in (401, 403):
+    if eb_code in _CONSENT_CODES:
         return _KIND_CONSENT
     if eb_code in _UNAVAILABLE_CODES or status >= 500 or status == 408:
         return _KIND_UNAVAILABLE
     return _KIND_CLIENT
 
 
-def _retryable(status: int) -> bool:
+def _retryable(status: int, eb_code: str | None) -> bool:
+    if eb_code in _RATE_CODES or eb_code in _UNAVAILABLE_CODES:
+        return False
     return status == 429 or status == 408 or status >= 500
 
 
@@ -167,6 +164,8 @@ def _retry_wait(response: httpx.Response, attempt: int) -> float:
         except ValueError:
             try:
                 dt = parsedate_to_datetime(raw)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
                 return min(MAX_RETRY_WAIT, max(0.0, dt.timestamp() - time.time()))
             except (TypeError, ValueError, OverflowError):
                 pass
@@ -191,8 +190,9 @@ def _req(method: str, path: str, **kw) -> dict:
                 continue
             if r.status_code < 400:
                 return r.json()
-            kind = _classify(r.status_code, _eb_error_code(r))
-            if not _retryable(r.status_code) or attempt + 1 >= MAX_ATTEMPTS:
+            eb_code = _eb_error_code(r)
+            kind = _classify(r.status_code, eb_code)
+            if not _retryable(r.status_code, eb_code) or attempt + 1 >= MAX_ATTEMPTS:
                 raise _error(kind)
             _sleep(_retry_wait(r, attempt))
     raise _error(_KIND_UNAVAILABLE)
